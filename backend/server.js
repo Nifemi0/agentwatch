@@ -11,6 +11,10 @@ const db = require('./models/database');
 const scannerRoutes = require('./routes/scanner');
 const agentRoutes = require('./routes/agents');
 const securityRoutes = require('./routes/security');
+const learnRoutes = require('./routes/learn');
+
+// Enable hot-reload for security patterns
+learnRoutes.setSecurityRouter(securityRoutes);
 
 const app = express();
 const server = http.createServer(app);
@@ -36,6 +40,7 @@ app.set('io', io);
 app.use('/api/scanner', scannerRoutes);
 app.use('/api/agents', agentRoutes);
 app.use('/api/security', securityRoutes);
+app.use('/api/learn', learnRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {

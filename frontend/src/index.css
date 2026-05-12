@@ -61,20 +61,22 @@ body::before {
 ::-webkit-scrollbar-thumb { background: var(--dimmer); border-radius: 2px; }
 ::-webkit-scrollbar-thumb:hover { background: var(--dim); }
 
-/* ─── Terminal Shell ─── */
+/* ─── Terminal Shell — full screen fill ─── */
 .app-shell {
-  width: 100%;
-  min-height: 100vh;
-  padding: 12px;
+  width: 100vw;
+  min-height: 100dvh;
+  padding: 6px;
   position: relative;
   z-index: 2;
   display: flex;
   flex-direction: column;
+  margin: 0;
+  box-sizing: border-box;
 }
 
 @media (min-width: 768px) {
   .app-shell {
-    padding: 16px;
+    padding: 8px;
   }
 }
 
@@ -86,22 +88,26 @@ body::before {
     0 0 60px var(--glow),
     0 12px 40px rgba(0,0,0,0.6),
     inset 0 0 0 1px rgba(255,255,255,0.03);
-  overflow: hidden;
+  overflow: visible;
   width: 100%;
   flex: 1;
   display: flex;
   flex-direction: column;
+  min-height: 0;
 }
 
 .terminal-body {
-  padding: 18px 20px 24px;
+  padding: 12px 14px 16px;
   flex: 1;
   display: flex;
   flex-direction: column;
+  min-height: 0;
+  width: 100%;
+  overflow-y: auto;
 }
 
 @media (min-width: 1200px) {
-  .terminal-body { padding: 24px 36px 32px; }
+  .terminal-body { padding: 16px 24px 20px; }
 }
 
 .terminal-titlebar {
@@ -144,10 +150,8 @@ body::before {
   letter-spacing: 0.04em;
 }
 
-.terminal-body { padding: 18px 20px 24px; }
-
 @media (min-width: 1200px) {
-  .terminal-body { padding: 24px 32px 32px; }
+  .terminal-body { padding: 16px 24px 20px; }
 }
 
 /* ─── Logo ─── */
@@ -602,14 +606,14 @@ input:focus, textarea:focus, select:focus {
 .attack-dropdown-menu {
   position: absolute;
   bottom: 100%;
-  right: 0;
+  left: 0;
   margin-bottom: 4px;
   background: var(--bg-2);
   border: 1px solid var(--dimmer);
   border-radius: 2px;
   padding: 4px;
   min-width: 200px;
-  z-index: 10;
+  z-index: 999;
 }
 .attack-dropdown-menu div {
   padding: 5px 10px;
@@ -713,12 +717,12 @@ input:focus, textarea:focus, select:focus {
 /* ─── Responsive ─── */
 @media (max-width: 720px) {
   body { font-size: 11px; line-height: 1.5; }
-  .app-shell { margin: 4px auto 12px; padding: 0 4px; }
+  .app-shell { margin: 0; padding: 3px; }
   .terminal { border-radius: 4px; }
   .terminal-titlebar { padding: 4px 8px; font-size: 9px; gap: 6px; }
   .terminal-titlebar .dot { width: 7px; height: 7px; }
   .terminal-titlebar .badge { font-size: 8px; padding: 0 4px; }
-  .terminal-body { padding: 8px 10px 56px; }
+  .terminal-body { padding: 6px 8px 56px; }
 
   /* Hide ASCII logo, show compact header */
   .logo pre { display: none; }
