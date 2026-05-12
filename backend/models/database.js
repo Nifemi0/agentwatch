@@ -86,4 +86,52 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_security_events_category ON security_events(intent_category);
 `);
 
+// ─── Session Memory (Phase 1 — Multi-turn attack detection) ───
+db.exec(`
+  CREATE TABLE IF NOT EXISTS sessions (
+    session_id TEXT PRIMARY KEY,
+    agent_id TEXT,
+    turn_count INTEGER DEFAULT 0,
+    risk_trajectory TEXT DEFAULT '[]',
+    current_risk_level TEXT DEFAULT 'low',
+    flagged_patterns TEXT DEFAULT '[]',
+    behavioral_drift TEXT DEFAULT '{}',
+    created_at TEXT,
+    updated_at TEXT
+  );
+  CREATE TABLE IF NOT EXISTS session_turns (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    session_id TEXT NOT NULL,
+    turn_number INTEGER,
+    prompt TEXT,
+    risk_score REAL DEFAULT 0,
+    intent_category TEXT DEFAULT 'general',
+    analysis TEXT,
+    timestamp TEXT,
+    FOREIGN KEY (session_id) REFERENCES sessions(session_id)
+  );
+  CREATE INDEX IF NOT EXISTS idx_turns_session ON session_turns(session_id);
+  CREATE INDEX IF NOT EXISTS idx_turns_time ON session_turns(timestamp);
+`);
+
+// ─── Agent Analyses (Phase 3 — Multi-agent security reasoning) ───
+db.exec(`
+  CREATE TABLE IF NOT EXISTS agent_analyses (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    event_id TEXT,
+    session_id TEXT,
+    agent_name TEXT NOT NULL,
+    risk_score REAL DEFAULT 0,
+    confidence REAL DEFAULT 0,
+    finding TEXT,
+    reasoning TEXT,
+    sub_categories TEXT,
+    timestamp TEXT,
+    FOREIGN KEY (event_id) REFERENCES security_events(id),
+    FOREIGN KEY (session_id) REFERENCES sessions(session_id)
+  );
+  CREATE INDEX IF NOT EXISTS idx_agent_event ON agent_analyses(event_id);
+  CREATE INDEX IF NOT EXISTS idx_agent_session ON agent_analyses(session_id);
+`);
+
 module.exports = db;

@@ -834,3 +834,5 @@ function tryParseJSON(str) {
 
 module.exports = router;
 module.exports.hotReloadPatterns = hotReloadPatterns;
+module.exports.runInspection = runInspection;
+module.exports.analyzeWithAI = analyzeWithAI;

@@ -12,6 +12,7 @@ const scannerRoutes = require('./routes/scanner');
 const agentRoutes = require('./routes/agents');
 const securityRoutes = require('./routes/security');
 const learnRoutes = require('./routes/learn');
+const securityPhasesRoutes = require('./routes/securityPhases');
 
 // Enable hot-reload for security patterns
 learnRoutes.setSecurityRouter(securityRoutes);
@@ -41,6 +42,7 @@ app.use('/api/scanner', scannerRoutes);
 app.use('/api/agents', agentRoutes);
 app.use('/api/security', securityRoutes);
 app.use('/api/learn', learnRoutes);
+app.use('/api/security-phases', securityPhasesRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {
