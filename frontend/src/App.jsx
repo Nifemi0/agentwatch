@@ -109,7 +109,9 @@ export default function App() {
           </div>
 
           {/* Content */}
-          {loading ? <div className="loading">loading...</div> : pages[page]}
+          {loading ? <div className="loading">loading...</div> :
+            <div className="page-scroll">{pages[page]}</div>
+          }
         </div>
       </div>
 

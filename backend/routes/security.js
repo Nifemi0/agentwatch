@@ -416,7 +416,7 @@ function writeAuditLog(action, direction, metadata, prompt, simulatedAt) {
       source: 'backend-api',
       action,
       direction,
-      prompt: prompt ? prompt.substring(0, 200) : '',
+      prompt: '', // Not stored — privacy: only verdict is logged
       metadata: metadata || {},
     };
     fs.appendFileSync(AUDIT_LOG_PATH, JSON.stringify(event) + '\n', 'utf-8');
