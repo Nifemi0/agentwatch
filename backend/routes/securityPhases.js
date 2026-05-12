@@ -20,6 +20,8 @@ const sessionMemory = require('../services/sessionMemory');
 const { detectMultiTurnAttack } = require('../services/multiTurnDetector');
 const { analyzeToolRisk, getRecommendedAction, getExfiltrationRisk } = require('../services/toolRiskAnalyzer');
 const { runSecurityAgents, behavioralJudge } = require('../services/securityAgents');
+const { detectMemoryPoisoning, analyzeSessionMemoryIntegrity } = require('../services/memoryPoisoningDetector');
+const { simulateExecution, formatSandboxSummary } = require('../services/runtimeSandbox');
 
 // Reference to the original security router for the base inspect call
 let securityRouter = null;
@@ -147,6 +149,18 @@ router.post('/inspect', async (req, res) => {
     const multiAgentResult = runSecurityAgents(prompt, sessionAnalysis, recentTurns);
     const verdict = multiAgentResult.verdict;
 
+    // ── Step 4.5: Phase 4 — Memory Poisoning Detection ──
+    const memoryPoisoning = detectMemoryPoisoning(prompt, recentTurns);
+    const sessionMemoryIntegrity = analyzeSessionMemoryIntegrity(recentTurns);
+    
+    // Phase 4 contributes to risk: memory poisoning adds to composite
+    const memoryRisk = memoryPoisoning.isPoisoning ? memoryPoisoning.riskScore : 0;
+    
+    // ── Step 4.75: Phase 5 — Runtime AI Sandboxing ──
+    const sandboxResult = simulateExecution(prompt, toolAnalysis, recentTurns);
+    const sandboxRisk = sandboxResult.sandboxRisk;
+    const shouldHaltExecution = sandboxResult.shouldHalt;
+    
     // ── Step 5: Composite Decision ──
     // Combine signals: keyword base + session risk + tool risk + multi-agent verdict
     const compositeSignals = [];
@@ -157,14 +171,18 @@ router.post('/inspect', async (req, res) => {
       { source: 'session', score: sessionRisk },
       { source: 'tool', score: toolAnalysis.overallRisk },
       { source: 'multi_agent', score: verdict.finalRisk },
+      { source: 'memory_poisoning', score: memoryRisk },
+      { source: 'sandbox', score: sandboxRisk },
     ];
 
-    // Determine composite risk (weighted: multi-agent 40%, keyword 30%, session 20%, tool 10%)
+    // Determine composite risk (weighted: multi-agent 30%, keyword 20%, session 15%, tool 10%, memory 10%, sandbox 15%)
     const compositeRisk = (
-      (verdict.finalRisk * 0.40) +
-      ((keywordMetadata.risk_score || 0) * 0.30) +
-      (sessionRisk * 0.20) +
-      (toolAnalysis.overallRisk * 0.10)
+      (verdict.finalRisk * 0.30) +
+      ((keywordMetadata.risk_score || 0) * 0.20) +
+      (sessionRisk * 0.15) +
+      (toolAnalysis.overallRisk * 0.10) +
+      (memoryRisk * 0.10) +
+      (sandboxRisk * 0.15)
     );
 
     // Determine final action
@@ -219,6 +237,23 @@ router.post('/inspect', async (req, res) => {
       compositeSignals.push('composite_high_risk');
     }
 
+    // Phase 4 — Memory poisoning override
+    if (memoryPoisoning.isPoisoning && finalAction !== 'DENY') {
+      finalAction = finalAction === 'ALLOW' ? 'REVIEW' : finalAction;
+      finalRule = 'phase4_memory_poisoning';
+      finalMessage = `[AGENTWATCH-P4] Flagged: memory poisoning attempt detected (${memoryPoisoning.poisoningType}).`;
+      compositeSignals.push('memory_poisoning');
+    }
+
+    // Phase 5 — Sandbox halt override
+    if (shouldHaltExecution && finalAction !== 'DENY') {
+      finalAction = 'DENY';
+      finalRule = 'phase5_sandbox_halt';
+      finalMessage = `[AGENTWATCH-P5] Blocked: sandbox simulation predicts ${sandboxResult.consequences.length} consequences (blast radius: ${sandboxResult.blastRadiusLabel}).`;
+      overrideReason = 'Sandbox simulation halt';
+      compositeSignals.push('sandbox_halt');
+    }
+
     // ── Step 6: Persist everything ──
     const eventId = uuidv4();
 
@@ -239,6 +274,8 @@ router.post('/inspect', async (req, res) => {
         phase1: { sessionRisk, multiTurnResult, sessionTurnCount: sessionAnalysis?.turnCount },
         phase2: { toolAnalysisSummary: { toolCount: toolAnalysis.toolCount, highRiskTools: toolAnalysis.highRiskToolCount, chained: toolAnalysis.chainedTools, warnings: toolAnalysis.warnings } },
         phase3: { verdict, agentVotes: verdict.agentVotes },
+        phase4: { memoryPoisoning: { isPoisoning: memoryPoisoning.isPoisoning, healthScore: memoryPoisoning.healthScore, type: memoryPoisoning.poisoningType }, sessionIntegrity: sessionMemoryIntegrity },
+        phase5: { sandbox: { riskScore: sandboxResult.sandboxRisk, blastRadius: sandboxResult.blastRadius, shouldHalt: sandboxResult.shouldHalt, consequences: sandboxResult.consequences.slice(0, 5) } },
         compositeRisk,
         compositeSignals,
         overrideReason,
@@ -335,6 +372,40 @@ router.post('/inspect', async (req, res) => {
         },
       },
       
+      // Phase 4
+      phase4: {
+        memoryPoisoning: {
+          isPoisoning: memoryPoisoning.isPoisoning,
+          riskScore: Math.round(memoryPoisoning.riskScore * 100),
+          confidence: Math.round(memoryPoisoning.confidence * 100),
+          healthScore: Math.round(memoryPoisoning.healthScore * 100),
+          type: memoryPoisoning.poisoningType,
+          details: memoryPoisoning.details,
+          indicators: memoryPoisoning.findings.map(f => ({ type: f.subType, severity: Math.round((f.weight || 0.5) * 100) })),
+        },
+        sessionIntegrity: {
+          score: Math.round(sessionMemoryIntegrity.integrityScore * 100),
+          status: sessionMemoryIntegrity.status,
+          risks: sessionMemoryIntegrity.risks,
+        },
+      },
+      
+      // Phase 5
+      phase5: {
+        sandbox: {
+          riskScore: Math.round(sandboxResult.sandboxRisk * 100),
+          blastRadius: sandboxResult.blastRadius,
+          blastRadiusLabel: sandboxResult.blastRadiusLabel,
+          highestSensitivity: sandboxResult.highestSensitivity,
+          consequenceRisk: Math.round(sandboxResult.consequenceRisk * 100),
+          consequences: sandboxResult.consequences.slice(0, 5),
+          affectedSystems: sandboxResult.affectedSystems,
+          shouldHalt: sandboxResult.shouldHalt,
+          warnings: sandboxResult.warnings.slice(0, 3),
+          summary: sandboxResult.summary,
+        },
+      },
+      
       // Composite
       composite: {
         compositeRisk: Math.round(compositeRisk * 100),
@@ -345,6 +416,8 @@ router.post('/inspect', async (req, res) => {
           session: Math.round(sessionRisk * 100),
           tool: Math.round(toolAnalysis.overallRisk * 100),
           multiAgent: Math.round(verdict.finalRisk * 100),
+          memoryPoisoning: Math.round(memoryRisk * 100),
+          sandbox: Math.round(sandboxRisk * 100),
         },
       },
       
