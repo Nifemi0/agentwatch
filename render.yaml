@@ -1,0 +1,22 @@
+services:
+  - type: web
+    name: agentwatch
+    runtime: docker
+    repo: https://github.com/your-username/agentwatch
+    branch: main
+    plan: free
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: "3001"
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: GEMINI_MODEL
+        value: gemini-2.5-flash
+      - key: AUDIT_LOG_PATH
+        value: /app/lobstertrap/audit.log
+      - key: POLICY_PATH
+        value: /app/lobstertrap/rugwatch_policy.yaml

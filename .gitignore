@@ -1,0 +1,43 @@
+# ─── Secrets ───
+.env
+.env.bot
+.env.*
+backend/.env
+backend/service-account.json
+*.key
+*.pem
+credentials.json
+
+# ─── Data ───
+*.db
+*.db-shm
+*.db-wal
+audit.log
+*.log
+lobstertrap/audit.log
+
+# ─── Dependencies ───
+node_modules/
+backend/node_modules/
+frontend/node_modules/
+
+# ─── Build ───
+frontend/build/
+dist/
+
+# ─── OS ───
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+
+# ─── Python ───
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# ─── IDE ───
+.vscode/
+.idea/
+*.sublime-*
