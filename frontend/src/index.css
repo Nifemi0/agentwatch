@@ -63,23 +63,18 @@ body::before {
 
 /* ─── Terminal Shell ─── */
 .app-shell {
-  max-width: 100%;
-  margin: 24px 12px 48px;
-  padding: 0;
+  width: 100%;
+  min-height: 100vh;
+  padding: 12px;
   position: relative;
   z-index: 2;
+  display: flex;
+  flex-direction: column;
 }
 
-@media (min-width: 1400px) {
+@media (min-width: 768px) {
   .app-shell {
-    margin: 24px 48px 48px;
-  }
-}
-
-@media (min-width: 768px) and (max-width: 1399px) {
-  .app-shell {
-    max-width: 94%;
-    margin: 24px auto 48px;
+    padding: 16px;
   }
 }
 
@@ -92,6 +87,21 @@ body::before {
     0 12px 40px rgba(0,0,0,0.6),
     inset 0 0 0 1px rgba(255,255,255,0.03);
   overflow: hidden;
+  width: 100%;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.terminal-body {
+  padding: 18px 20px 24px;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+@media (min-width: 1200px) {
+  .terminal-body { padding: 24px 36px 32px; }
 }
 
 .terminal-titlebar {
