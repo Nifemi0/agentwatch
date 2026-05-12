@@ -14,6 +14,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const { execSync } = require('child_process');
 const { SEED_ATTACKS } = require('./sources/seed_data');
 const { scrapeAll, classifyAttack } = require('./sources/github_scraper');
 const { batchExtract, mergePatterns, generateDiffReport } = require('./pattern_extractor');
@@ -172,8 +173,29 @@ async function runLearningPipeline(options = {}) {
   // 5. Save
   savePatterns(patterns);
   const newCounts = getCategoryCounts(patterns);
-  
-  // 6. Generate report
+
+  // 6. Commit to GitHub (global hive-mind — every instance shares patterns)
+  try {
+    const repoRoot = path.resolve(__dirname, '..', '..');
+    execSync('git add backend/learn/patterns.json', { cwd: repoRoot, stdio: 'pipe' });
+    const changed = execSync('git diff --cached --quiet || echo "changed"', { cwd: repoRoot, stdio: 'pipe' }).toString().trim();
+    if (changed) {
+      const msg = `🤖 Auto-learn: +${seedCount + scrapedCount} new detection patterns [${new Date().toISOString().slice(0,10)}]`;
+      execSync(`git commit -m "${msg}"`, { cwd: repoRoot, stdio: 'pipe' });
+      execSync('git push', { cwd: repoRoot, stdio: 'pipe', timeout: 30000 });
+      console.log(`  → Patterns committed & pushed to GitHub (${report.summary.total_patterns} total)`);
+      report.pushed_to_github = true;
+    } else {
+      console.log('  → No new patterns to commit');
+      report.pushed_to_github = false;
+    }
+  } catch (e) {
+    console.warn(`  ⚠ Git commit/push failed: ${e.message}`);
+    report.pushed_to_github = false;
+    report.push_error = e.message;
+  }
+
+  // 7. Generate report
   const report = generateDiffReport(prevCounts, newCounts, { seed: seedCount, scraped: scrapedCount });
   report.summary = {
     seed_patterns_added: seedCount,
