@@ -65,4 +65,25 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_scan_results_scan ON scan_results(scan_id);
 `);
 
+// ─── Security Events (persistent memory — never wiped) ───
+db.exec(`
+  CREATE TABLE IF NOT EXISTS security_events (
+    id TEXT PRIMARY KEY,
+    timestamp TEXT NOT NULL,
+    action TEXT NOT NULL,
+    direction TEXT DEFAULT 'ingress',
+    rule TEXT,
+    message TEXT,
+    risk_score REAL DEFAULT 0,
+    intent_category TEXT,
+    intent_confidence REAL DEFAULT 0,
+    layer TEXT DEFAULT 'keyword',
+    metadata TEXT,
+    created_at INTEGER DEFAULT (unixepoch())
+  );
+  CREATE INDEX IF NOT EXISTS idx_security_events_time ON security_events(timestamp);
+  CREATE INDEX IF NOT EXISTS idx_security_events_action ON security_events(action);
+  CREATE INDEX IF NOT EXISTS idx_security_events_category ON security_events(intent_category);
+`);
+
 module.exports = db;

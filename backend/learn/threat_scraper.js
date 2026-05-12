@@ -174,7 +174,17 @@ async function runLearningPipeline(options = {}) {
   savePatterns(patterns);
   const newCounts = getCategoryCounts(patterns);
 
-  // 6. Commit to GitHub (global hive-mind — every instance shares patterns)
+  // 6. Generate report (MUST be before git commit — report is used there)
+  const report = generateDiffReport(prevCounts, newCounts, { seed: seedCount, scraped: scrapedCount });
+  report.summary = {
+    seed_patterns_added: seedCount,
+    scraped_patterns_added: scrapedCount,
+    total_patterns: patterns.meta.total_patterns,
+    sources: patterns.meta.sources.length,
+    total_raw_attacks: Object.values(patterns.categories).reduce((s, c) => s + (c.raw_attacks || []).length, 0),
+  };
+
+  // 7. Commit to GitHub (global hive-mind — every instance shares patterns)
   try {
     const repoRoot = path.resolve(__dirname, '..', '..');
     execSync('git add backend/learn/patterns.json', { cwd: repoRoot, stdio: 'pipe' });
@@ -195,16 +205,6 @@ async function runLearningPipeline(options = {}) {
     report.push_error = e.message;
   }
 
-  // 7. Generate report
-  const report = generateDiffReport(prevCounts, newCounts, { seed: seedCount, scraped: scrapedCount });
-  report.summary = {
-    seed_patterns_added: seedCount,
-    scraped_patterns_added: scrapedCount,
-    total_patterns: patterns.meta.total_patterns,
-    sources: patterns.meta.sources.length,
-    total_raw_attacks: Object.values(patterns.categories).reduce((s, c) => s + (c.raw_attacks || []).length, 0),
-  };
-  
   console.log('\n=== Pipeline Complete ===');
   console.log(`Total patterns: ${report.summary.total_patterns}`);
   console.log(`New from seed: ${seedCount}`);

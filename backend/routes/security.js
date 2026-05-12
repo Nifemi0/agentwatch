@@ -4,6 +4,7 @@ const fs = require('fs');
 const path = require('path');
 const { execSync } = require('child_process');
 const { v4: uuidv4 } = require('uuid');
+const db = require('../models/database');
 
 const AUDIT_LOG_PATH = process.env.AUDIT_LOG_PATH || path.resolve(__dirname, '..', '..', 'lobstertrap', 'audit.log');
 const POLICY_PATH = process.env.POLICY_PATH || path.resolve(__dirname, '..', '..', 'lobstertrap', 'rugwatch_policy.yaml');
@@ -407,19 +408,30 @@ async function runInspection(prompt) {
   return fallbackInspect(prompt);
 }
 
-// Helper: write a JSON event to the audit log
+// Helper: write an event to persistent SQLite storage
 function writeAuditLog(action, direction, metadata, prompt, simulatedAt) {
   try {
     const event = {
+      id: uuidv4(),
       timestamp: simulatedAt || new Date().toISOString(),
-      request_id: uuidv4(),
-      source: 'backend-api',
       action,
       direction,
-      prompt: '', // Not stored — privacy: only verdict is logged
-      metadata: metadata || {},
+      rule: metadata?.rule || null,
+      message: metadata?.message || null,
+      risk_score: metadata?.risk_score || 0,
+      intent_category: metadata?.intent_category || 'general',
+      intent_confidence: metadata?.intent_confidence || 0,
+      layer: metadata?.ai_flagged ? 'ai' : (metadata?.contains_injection_patterns ? 'keyword' : 'dynamic'),
+      metadata: JSON.stringify(metadata || {}),
     };
-    fs.appendFileSync(AUDIT_LOG_PATH, JSON.stringify(event) + '\n', 'utf-8');
+    
+    db.prepare(`
+      INSERT INTO security_events (id, timestamp, action, direction, rule, message, risk_score, intent_category, intent_confidence, layer, metadata)
+      VALUES (@id, @timestamp, @action, @direction, @rule, @message, @risk_score, @intent_category, @intent_confidence, @layer, @metadata)
+    `).run(event);
+
+    // Also keep flat file for tail-based debugging
+    fs.appendFileSync(AUDIT_LOG_PATH, JSON.stringify({...event, metadata: metadata || {}}) + '\n', 'utf-8');
   } catch (e) {
     console.error('Audit log write error:', e.message);
   }
@@ -553,7 +565,9 @@ router.post('/inspect', async (req, res) => {
       message = '[AGENTWATCH] Flagged for human review.';
     }
 
-    // Write to audit log
+    // Write to audit log — attach rule + message to metadata for SQLite
+    metadata.rule = rule;
+    metadata.message = message;
     writeAuditLog(action, 'ingress', metadata, prompt, simulatedTime);
 
     res.json({
@@ -719,54 +733,104 @@ router.post('/policy', (req, res) => {
   }
 });
 
-// ─── Get events ───
+// ─── Get events from persistent SQLite storage ───
 router.get('/events', (req, res) => {
-  const limit = Math.min(parseInt(req.query.limit) || 50, 200);
+  const limit = Math.min(parseInt(req.query.limit) || 50, 500);
+  const action = req.query.action; // optional: DENY, ALLOW, REVIEW
+  const category = req.query.category; // optional: prompt_injection, phishing, etc.
+  const layer = req.query.layer; // optional: keyword, dynamic, ai
+  
   try {
-    if (!fs.existsSync(AUDIT_LOG_PATH)) {
-      return res.json({ events: [], total: 0, blocked: 0, allowed: 0 });
-    }
-    const content = fs.readFileSync(AUDIT_LOG_PATH, 'utf-8');
-    const lines = content.trim().split('\n').filter(Boolean);
-    const events = lines.slice(-limit).map(l => { try { return JSON.parse(l); } catch { return null; } }).filter(Boolean)
-      .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
-
+    let sql = `SELECT * FROM security_events WHERE 1=1`;
+    const params = {};
+    
+    if (action) { sql += ` AND action = @action`; params.action = action; }
+    if (category) { sql += ` AND intent_category = @category`; params.category = category; }
+    if (layer) { sql += ` AND layer = @layer`; params.layer = layer; }
+    
+    sql += ` ORDER BY timestamp DESC LIMIT @limit`;
+    params.limit = limit;
+    
+    const rows = db.prepare(sql).all(params);
+    
+    // Parse metadata JSON for frontend compatibility
+    const events = rows.map(r => ({
+      ...r,
+      metadata: tryParseJSON(r.metadata) || {},
+    }));
+    
+    // Get total counts
+    const stats = db.prepare(`SELECT action, COUNT(*) as count FROM security_events GROUP BY action`).all();
+    const totalMap = {};
+    for (const s of stats) totalMap[s.action] = s.count;
+    
     res.json({
       events,
-      total: lines.length,
-      blocked: events.filter(e => e.action === 'DENY').length,
-      allowed: events.filter(e => e.action === 'ALLOW').length
+      total: stats.reduce((s, r) => s + r.count, 0),
+      blocked: totalMap['DENY'] || 0,
+      allowed: totalMap['ALLOW'] || 0,
+      reviewed: totalMap['REVIEW'] || 0,
     });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error('Events query error:', error.message);
+    // Fallback to flat file
+    try {
+      if (!fs.existsSync(AUDIT_LOG_PATH)) return res.json({ events: [], total: 0, blocked: 0, allowed: 0 });
+      const content = fs.readFileSync(AUDIT_LOG_PATH, 'utf-8');
+      const lines = content.trim().split('\n').filter(Boolean);
+      const events = lines.slice(-limit).map(l => { try { return JSON.parse(l); } catch { return null; } }).filter(Boolean)
+        .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+      return res.json({ events, total: lines.length, blocked: events.filter(e => e.action === 'DENY').length, allowed: events.filter(e => e.action === 'ALLOW').length });
+    } catch (e2) {
+      res.status(500).json({ error: error.message });
+    }
   }
 });
 
-// ─── Get stats ───
+// ─── Get stats from SQLite ───
 router.get('/stats', (req, res) => {
   try {
-    if (!fs.existsSync(AUDIT_LOG_PATH)) {
-      return res.json({ total_requests: 0, blocked: 0, allowed: 0 });
-    }
-    const content = fs.readFileSync(AUDIT_LOG_PATH, 'utf-8');
-    const lines = content.trim().split('\n').filter(Boolean);
-    const events = lines.map(l => { try { return JSON.parse(l); } catch { return null; } }).filter(Boolean);
+    const total = db.prepare(`SELECT COUNT(*) as count FROM security_events`).get()?.count || 0;
+    const blocked = db.prepare(`SELECT COUNT(*) as count FROM security_events WHERE action = 'DENY'`).get()?.count || 0;
+    const allowed = db.prepare(`SELECT COUNT(*) as count FROM security_events WHERE action = 'ALLOW'`).get()?.count || 0;
+    const reviewed = db.prepare(`SELECT COUNT(*) as count FROM security_events WHERE action = 'REVIEW'`).get()?.count || 0;
+    const highRisk = db.prepare(`SELECT COUNT(*) as count FROM security_events WHERE risk_score > 0.5`).get()?.count || 0;
+    
+    // Per-category breakdown
+    const byCategory = db.prepare(`SELECT intent_category, COUNT(*) as count FROM security_events GROUP BY intent_category ORDER BY count DESC`).all();
+    const byLayer = db.prepare(`SELECT layer, COUNT(*) as count FROM security_events GROUP BY layer`).all();
+    const byAction = db.prepare(`SELECT action, COUNT(*) as count FROM security_events GROUP BY action`).all();
 
     res.json({
-      total_requests: lines.length,
-      blocked: events.filter(e => e.action === 'DENY').length,
-      allowed: events.filter(e => e.action === 'ALLOW').length,
-      ingress: events.filter(e => e.direction === 'ingress').length,
-      egress: events.filter(e => e.direction === 'egress').length,
-      high_risk: events.filter(e => (e.metadata?.risk_score || 0) > 0.5).length,
-      injection_attempts: events.filter(e => e.metadata?.contains_injection_patterns).length,
-      malware_attempts: events.filter(e => e.metadata?.contains_malware_request).length,
-      exfiltration_attempts: events.filter(e => e.metadata?.contains_exfiltration).length
+      total_requests: total,
+      blocked,
+      allowed,
+      reviewed,
+      ingress: total,
+      egress: 0,
+      high_risk: highRisk,
+      by_category: byCategory,
+      by_layer: byLayer,
+      by_action: byAction,
     });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    // Fallback to flat file
+    try {
+      if (!fs.existsSync(AUDIT_LOG_PATH)) return res.json({ total_requests: 0, blocked: 0, allowed: 0 });
+      const content = fs.readFileSync(AUDIT_LOG_PATH, 'utf-8');
+      const lines = content.trim().split('\n').filter(Boolean);
+      const events = lines.map(l => { try { return JSON.parse(l); } catch { return null; } }).filter(Boolean);
+      return res.json({ total_requests: lines.length, blocked: events.filter(e => e.action === 'DENY').length, allowed: events.filter(e => e.action === 'ALLOW').length });
+    } catch (e2) {
+      res.status(500).json({ error: error.message });
+    }
   }
 });
+
+// Helper
+function tryParseJSON(str) {
+  try { return JSON.parse(str); } catch { return null; }
+}
 
 module.exports = router;
 module.exports.hotReloadPatterns = hotReloadPatterns;
