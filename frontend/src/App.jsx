@@ -73,6 +73,7 @@ export default function App() {
 
   return (
     <div className="app-shell">
+      <div className="scanner" />
       <div className="terminal">
         {/* ─── Titlebar ─── */}
         <div className="terminal-titlebar">
