@@ -63,11 +63,24 @@ body::before {
 
 /* ─── Terminal Shell ─── */
 .app-shell {
-  max-width: 86ch;
-  margin: 24px auto 48px;
-  padding: 0 12px;
+  max-width: 100%;
+  margin: 24px 12px 48px;
+  padding: 0;
   position: relative;
   z-index: 2;
+}
+
+@media (min-width: 1400px) {
+  .app-shell {
+    margin: 24px 48px 48px;
+  }
+}
+
+@media (min-width: 768px) and (max-width: 1399px) {
+  .app-shell {
+    max-width: 94%;
+    margin: 24px auto 48px;
+  }
 }
 
 .terminal {
@@ -122,6 +135,10 @@ body::before {
 }
 
 .terminal-body { padding: 18px 20px 24px; }
+
+@media (min-width: 1200px) {
+  .terminal-body { padding: 24px 32px 32px; }
+}
 
 /* ─── Logo ─── */
 .logo pre {
@@ -216,6 +233,12 @@ body::before {
   flex-wrap: wrap;
   gap: 24px;
   margin-bottom: 16px;
+}
+
+@media (min-width: 1200px) {
+  .stats-line {
+    gap: 48px;
+  }
 }
 
 .stat {
