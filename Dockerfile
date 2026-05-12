@@ -10,7 +10,7 @@ RUN cd backend && npm install --production
 COPY backend/ ./backend/
 
 # Build frontend
-COPY frontend/package*.json ./frontend/
+COPY frontend/ ./frontend/
 RUN cd frontend && npm install && npm run build
 
 # Copy root files
