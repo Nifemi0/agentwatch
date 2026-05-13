@@ -18,9 +18,13 @@ const GITHUB_SEARCH_URL = 'https://api.github.com/search/repositories';
 
 // Well-known repos with prompt injection / jailbreak content
 const KNOWN_SOURCES = [
-  { url: 'https://raw.githubusercontent.com/takieyd1/prompt-injection-dataset/main/data.json', type: 'dataset', category: 'injection' },
-  { url: 'https://raw.githubusercontent.com/verazuo/jailbreak_llms/main/data/jailbreak_prompts.json', type: 'dataset', category: 'injection' },
-  { url: 'https://raw.githubusercontent.com/agencyenterprise/PromptInject/main/promptinject/data/prompts.json', type: 'dataset', category: 'injection' },
+  // 28K jailbreak prompts from COLM 2024 benchmark
+  { url: 'https://raw.githubusercontent.com/SaFo-Lab/JailBreakV_28K/main/JailBreakV_28K/JailBreakV_28K.csv', type: 'dataset', category: 'injection' },
+  // Curated prompt injections from Giskard Scan (multi-source aggregation)
+  { url: 'https://raw.githubusercontent.com/Giskard-AI/prompt-injections/main/prompt_injections.csv', type: 'dataset', category: 'injection' },
+  // Labeled dataset from CTF research
+  { url: 'https://raw.githubusercontent.com/compass-ctf-team/prompt_injection_research/main/dataset/prompt-injection-dataset.csv', type: 'dataset', category: 'injection' },
+  // garak LLM vulnerability probe library
   { url: 'https://raw.githubusercontent.com/leondz/garak/main/garak/probes/promptinject.py', type: 'source', category: 'injection' },
 ];
 
