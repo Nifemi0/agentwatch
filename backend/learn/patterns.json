@@ -1,7 +1,7 @@
 {
   "version": 1,
   "meta": {
-    "last_updated": "2026-06-06T00:00:34.810Z",
+    "last_updated": "2026-06-06T06:00:49.805Z",
     "total_patterns": 420,
     "sources": [
       "https://raw.githubusercontent.com/leondz/garak/main/garak/probes/promptinject.py",
